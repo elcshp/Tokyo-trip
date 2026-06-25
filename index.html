@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>東京建築巡礼 · 行程导航</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+
+:root{
+  --G:#ff9500; --M:#f62e36; --H:#9c9c93; --C:#00bb85; --Z:#8f76d6;
+  --F:#9c5e31; --N:#00ac9b; --TY:#da0442; --IN:#0079c2; --JR:#80c241; --EN:#1d8a4e;
+  --d0:#4a6670; --d1:#c1432e; --d2:#cc8b1f; --d3:#2f6fa8; --d4:#7a5495; --d5:#1a8a7a; --dH:#8a6d3b;
+  --paper:#ece7dd; --paper2:#e3dccd; --ink:#241f1c; --ink2:#5a534c;
+  --card:#faf7f1; --line:rgba(36,31,28,.14);
+}
+
+html,body{height:100%;}
+body{
+  font-family:'Noto Sans JP',sans-serif; background:var(--paper); color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ============================================================
+   DESKTOP LAYOUT (default): side-by-side map + panel
+   ============================================================ */
+.app{display:grid; grid-template-columns:1fr 460px; height:100vh; overflow:hidden;}
+.map-wrap{position:relative; background:#dcd7cd;}
+#map{width:100%; height:100%; background:#dcd7cd;}
+
+/* day switcher over map (desktop) */
+.daybar{
+  position:absolute; top:16px; left:16px; right:16px; z-index:600;
+  display:grid; grid-template-columns:repeat(7,1fr); gap:6px;
+}
+.daybar-btn{
+  padding:10px 4px; border:none; cursor:pointer; border-radius:10px;
+  background:rgba(250,247,241,.92); backdrop-filter:blur(8px);
+  box-shadow:0 2px 12px rgba(0,0,0,.1); transition:all .22s;
+  font-family:'Shippori Mincho',serif; font-weight:700; position:relative; overflow:hidden;
+}
+.daybar-btn .dn{font-size:16px; display:block; line-height:1;}
+.daybar-btn .dl{font-size:8.5px; letter-spacing:.02em; color:var(--ink2); margin-top:4px; font-family:'JetBrains Mono',monospace; white-space:nowrap;}
+.daybar-btn::after{content:''; position:absolute; bottom:0; left:0; right:0; height:3px; background:var(--dc); transform:scaleX(0); transition:transform .22s;}
+.daybar-btn.active{background:var(--card);}
+.daybar-btn.active::after{transform:scaleX(1);}
+.daybar-btn.active .dn{color:var(--dc);}
+.daybar-btn[data-d="0"]{--dc:var(--d0);} .daybar-btn[data-d="1"]{--dc:var(--d1);}
+.daybar-btn[data-d="2"]{--dc:var(--d2);} .daybar-btn[data-d="3"]{--dc:var(--d3);}
+.daybar-btn[data-d="4"]{--dc:var(--d4);} .daybar-btn[data-d="5"]{--dc:var(--d5);}
+.daybar-btn[data-d="H"]{--dc:var(--dH);}
+
+.maplegend{
+  position:absolute; bottom:16px; left:16px; z-index:600;
+  background:rgba(250,247,241,.94); backdrop-filter:blur(8px); border-radius:10px;
+  padding:13px 15px; box-shadow:0 2px 12px rgba(0,0,0,.1); font-size:11px; max-width:200px;
+}
+.maplegend .lt{font-family:'Shippori Mincho',serif; font-weight:700; font-size:13px; margin-bottom:9px;}
+.maplegend .li{display:flex; align-items:center; gap:8px; margin-bottom:5px; color:var(--ink2);}
+.maplegend .ld{width:16px; height:4px; border-radius:2px; flex-shrink:0;}
+
+.pin{
+  width:34px; height:34px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+  border:2.5px solid #fff; box-shadow:0 3px 8px rgba(0,0,0,.3); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; transition:all .2s;
+}
+.pin span{transform:rotate(45deg); color:#fff; font-weight:700; font-size:14px; font-family:'JetBrains Mono',monospace;}
+.pin:hover{transform:rotate(-45deg) scale(1.15); z-index:1000;}
+.pin.dim{opacity:.4;}
+
+.leaflet-popup-content-wrapper{border-radius:10px;}
+.leaflet-popup-content{font-family:'Noto Sans JP',sans-serif !important; font-size:12px !important; margin:10px 12px !important;}
+.leaflet-popup-content b{font-family:'Shippori Mincho',serif;}
+.leaflet-control-zoom{margin-top:74px !important;}
+
+/* panel (right column, desktop) */
+.panel{background:var(--paper2); display:flex; flex-direction:column; height:100vh; overflow:hidden;}
+.phead{padding:22px 26px 16px; border-bottom:1px solid var(--line); background:var(--card); flex-shrink:0;}
+.phead .eyebrow{
+  font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--dc-head);
+  text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:10px;
+}
+.phead .eyebrow::before{content:''; width:24px; height:1px; background:var(--dc-head);}
+.phead h1{font-family:'Shippori Mincho',serif; font-size:24px; font-weight:800; line-height:1.25;}
+.phead .sub{font-size:12.5px; color:var(--ink2); margin-top:8px; line-height:1.6;}
+.phead .daystat{display:flex; gap:18px; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);}
+.phead .daystat .si{font-family:'JetBrains Mono',monospace;}
+.phead .daystat .sv{font-size:16px; font-weight:700; color:var(--dc-head);}
+.phead .daystat .sl{font-size:9px; color:var(--ink2); letter-spacing:.04em;}
+
+.scroller{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+.scroller::-webkit-scrollbar{width:5px;}
+.scroller::-webkit-scrollbar-thumb{background:rgba(36,31,28,.2); border-radius:3px;}
+
+.timeline{padding:8px 0 48px;}
+.tstop{position:relative; padding:0 26px 0 62px;}
+.tstop::before{content:''; position:absolute; left:33px; top:0; bottom:0; width:2px; background:var(--line);}
+.tstop:last-child::before{bottom:auto; height:30px;}
+.tstop:first-child::before{top:30px;}
+.tdot{position:absolute; left:25px; top:22px; width:18px; height:18px; border-radius:50%; background:var(--card); border:3px solid var(--dc-head); z-index:2; transition:all .2s;}
+.tstop.active .tdot{background:var(--dc-head); box-shadow:0 0 0 5px rgba(0,0,0,.06); transform:scale(1.15);}
+
+.tcard{margin:14px 0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; cursor:pointer; transition:all .22s;}
+.tcard:hover{transform:translateX(3px); border-color:var(--dc-head); box-shadow:0 4px 14px rgba(0,0,0,.07);}
+.tstop.active .tcard{border-color:var(--dc-head); box-shadow:0 4px 18px rgba(0,0,0,.1);}
+.tcard .row1{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+.tcard .time{font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:var(--dc-head);}
+.openchip{font-size:9.5px; font-weight:600; padding:3px 8px; border-radius:20px; font-family:'JetBrains Mono',monospace; letter-spacing:.02em; flex-shrink:0;}
+.openchip.open{background:rgba(26,138,122,.14); color:#0e7c5f;}
+.openchip.closed{background:rgba(193,67,46,.14); color:#b23a26;}
+.openchip.free{background:rgba(36,31,28,.07); color:var(--ink2);}
+.tcard h3{font-family:'Shippori Mincho',serif; font-size:18px; font-weight:700; margin:8px 0 2px; line-height:1.3;}
+.tcard .en{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink2);}
+.tcard .desc{font-size:12.5px; color:var(--ink2); line-height:1.7; margin-top:8px;}
+.tcard .meta{display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;}
+.chip{font-size:10.5px; padding:4px 9px; border-radius:6px; display:inline-flex; align-items:center; gap:5px; font-weight:500;}
+.chip.addr{background:rgba(36,31,28,.05); color:var(--ink2);}
+.chip.price,.chip.ticket{background:rgba(204,139,31,.12); color:#9a6a12; font-weight:600;}
+.chip.stn{color:#fff; font-weight:600;}
+.warn{margin-top:10px; padding:9px 12px; border-radius:8px; background:rgba(193,67,46,.1); border-left:3px solid #c1432e; font-size:11.5px; color:#a83018; font-weight:500; line-height:1.5;}
+.transit{margin-top:12px; padding:12px 14px; border-radius:10px; background:linear-gradient(135deg,rgba(36,31,28,.04),rgba(36,31,28,.02)); border:1px solid var(--line);}
+.transit .th{font-size:10px; font-family:'JetBrains Mono',monospace; letter-spacing:.08em; color:var(--ink2); text-transform:uppercase; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.transit .th .next{font-weight:700; color:var(--ink); text-align:right;}
+.transit .legs{display:flex; flex-direction:column; gap:8px;}
+.leg{display:flex; align-items:center; gap:10px; font-size:11.5px;}
+.leg .lineicon{width:24px; height:24px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:11px; font-family:'JetBrains Mono',monospace;}
+.leg .linetext{flex:1; line-height:1.4;}
+.leg .linetext b{color:var(--ink);}
+.leg .linetext .sub{color:var(--ink2); font-size:10px;}
+.transit .summ{margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; gap:14px; font-family:'JetBrains Mono',monospace; font-size:11px;}
+.transit .summ b{color:var(--ink);}
+
+/* hotels view */
+.hotelview{padding:8px 26px 48px;}
+.hotel-intro{padding:14px 0 6px; font-size:12.5px; color:var(--ink2); line-height:1.7;}
+.hcard{margin:14px 0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; transition:all .22s;}
+.hcard:hover{border-color:var(--dc-head); box-shadow:0 4px 14px rgba(0,0,0,.07);}
+.hcard .hrow{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+.hcard h3{font-family:'Shippori Mincho',serif; font-size:19px; font-weight:700; line-height:1.3;}
+.hcard .harea{font-size:10px; font-family:'JetBrains Mono',monospace; color:#fff; background:var(--dc-head); padding:3px 9px; border-radius:20px; letter-spacing:.03em; flex-shrink:0;}
+.hcard .hen{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink2); margin-top:3px;}
+.hcard .hmeta{display:flex; flex-wrap:wrap; gap:6px; margin:12px 0;}
+.hcard .hnote{font-size:12.5px; color:var(--ink2); line-height:1.75; margin-top:10px;}
+.hcard .hsub{display:flex; gap:8px; align-items:flex-start; font-size:11.5px; color:var(--ink2); line-height:1.5; margin-top:8px;}
+.hcard .hsub .hicon{flex-shrink:0; font-size:12px;}
+.hcard .hsub b{color:var(--ink); font-weight:600; margin-right:6px;}
+.hcard.hactive{border-color:var(--dH); box-shadow:0 4px 18px rgba(138,109,59,.18);}
+.hotelpin{width:30px; height:30px; border-radius:50%; border:2.5px solid #fff; box-shadow:0 3px 8px rgba(0,0,0,.3); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px;}
+.hcard.pick{border-color:var(--dH); background:linear-gradient(135deg,rgba(138,109,59,.05),var(--card));}
+.hcard .picktag{display:inline-block; font-size:9.5px; font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--dH); letter-spacing:.08em; margin-bottom:6px;}
+
+/* ============================================================
+   MOBILE LAYOUT: single column, map as collapsible preview
+   ============================================================ */
+.m-only{display:none;}
+
+@media (max-width:840px){
+  body{overflow-y:auto;}
+  .app{display:block; height:auto; overflow:visible;}
+
+  /* map becomes a fixed-height preview at top, not half the screen */
+  .map-wrap{height:38vh; min-height:260px; position:sticky; top:0; z-index:1;}
+
+  /* daybar: horizontal scroll strip, bigger touch targets */
+  .daybar{
+    position:absolute; top:auto; bottom:10px; left:10px; right:10px;
+    display:flex; gap:7px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;
+  }
+  .daybar::-webkit-scrollbar{display:none;}
+  .daybar-btn{flex:0 0 auto; min-width:64px; padding:9px 12px; scroll-snap-align:start;}
+  .daybar-btn .dn{font-size:15px;}
+  .daybar-btn .dl{font-size:9px;}
+
+  .maplegend{display:none;} /* legend redundant on small screens */
+
+  /* panel flows below map as the main scroll */
+  .panel{height:auto; overflow:visible; background:var(--paper);}
+  .phead{padding:20px 18px 14px;}
+  .phead h1{font-size:22px;}
+  .phead .sub{font-size:13px;}            /* slightly larger body text on mobile */
+  .phead .daystat{gap:14px;}
+
+  .scroller{overflow:visible;}
+  .timeline{padding:6px 0 32px;}
+  .tstop{padding:0 18px 0 52px;}
+  .tstop::before{left:25px;}
+  .tdot{left:17px; width:16px; height:16px;}
+
+  /* larger tap-friendly cards & type on phones */
+  .tcard{padding:16px; margin:12px 0; border-radius:14px;}
+  .tcard:hover{transform:none;}          /* no hover-translate on touch */
+  .tcard:active{transform:scale(.99);}
+  .tcard .time{font-size:17px;}
+  .tcard h3{font-size:19px;}
+  .tcard .desc{font-size:13.5px; line-height:1.8;}
+  .chip{font-size:11.5px; padding:5px 10px;}
+  .leg{font-size:12.5px;}
+  .leg .lineicon{width:26px; height:26px; font-size:12px;}
+  .transit .th{font-size:11px;}
+
+  .hotelview{padding:6px 18px 36px;}
+  .hcard{padding:18px; border-radius:14px;}
+  .hcard h3{font-size:20px;}
+  .hcard .hnote{font-size:13.5px;}
+
+  .m-only{display:block;}
+  .d-only{display:none;}
+}
+
+@media (max-width:840px) and (min-width:560px){
+  .map-wrap{height:42vh;}
+}
+
+button:focus-visible, .tcard:focus-visible{outline:2px solid var(--dc-head,#c1432e); outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="daybar" id="daybar"></div>
+    <div class="maplegend">
+      <div class="lt">行程总览</div>
+      <div class="li"><span class="ld" style="background:var(--d0)"></span>Day 0 · 抵达成田</div>
+      <div class="li"><span class="ld" style="background:var(--d1)"></span>Day 1 · 麻布台→银座</div>
+      <div class="li"><span class="ld" style="background:var(--d2)"></span>Day 2 · 浅草→下北泽</div>
+      <div class="li"><span class="ld" style="background:var(--d3)"></span>Day 3 · 镰仓一日游</div>
+      <div class="li"><span class="ld" style="background:var(--d4)"></span>Day 4 · 港区设计巡礼</div>
+      <div class="li"><span class="ld" style="background:var(--d5)"></span>Day 5 · 代官山→成田</div>
+    </div>
+  </div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<script>
+const LINES={
+  G:{name:'銀座線',c:'#ff9500'}, M:{name:'丸ノ内線',c:'#f62e36'}, H:{name:'日比谷線',c:'#9c9c93'},
+  C:{name:'千代田線',c:'#00bb85'}, Z:{name:'半蔵門線',c:'#8f76d6'}, F:{name:'副都心線',c:'#9c5e31'},
+  N:{name:'南北線',c:'#00ac9b'}, TY:{name:'東急東横線',c:'#da0442'}, IN:{name:'井の頭線',c:'#0079c2'},
+  JR:{name:'JR線',c:'#80c241'}, EN:{name:'江ノ電',c:'#1d8a4e'}, WALK:{name:'徒歩',c:'#999'}
+};
+const DC={0:'#4a6670',1:'#c1432e',2:'#cc8b1f',3:'#2f6fa8',4:'#7a5495',5:'#1a8a7a',H:'#8a6d3b'};
+
+function openStatus(s){
+  if(s.free) return {cls:'free',txt:'全天开放'};
+  if(!s.hours) return null;
+  const now=new Date(), dow=now.getDay();
+  if(s.closedDays && s.closedDays.includes(dow)) return {cls:'closed',txt:'今日休館'};
+  const [oh,ch]=s.hours, h=now.getHours()+now.getMinutes()/60;
+  if(h>=oh && h<ch) return {cls:'open',txt:`营业中 ·${Math.floor(ch)}时关`};
+  return {cls:'closed',txt:`${Math.floor(oh)}:00开门`};
+}
+
+const STOPS=[
+  // DAY 0
+  {day:0,time:"15:30",name:"成田机场 抵达",en:"NARITA ARRIVAL",lat:35.7720,lng:140.3929,addr:"成田国際空港 第1/第2ターミナル",stn:"成田空港駅",stnLine:"JR",desc:"落地后入境审查→取行李→通关约45-60分钟。出关后在JR东日本旅行服务中心购买N'EX车票前往市区,可同时买好返程或考虑N'EX来回优惠票¥5000。",free:true,warn:"提示:N'EX全车指定席,现场购票即分配座位,车厢门口有大型行李架。",transit:{to:"市区酒店",legs:[{line:"JR",txt:"成田空港→东京站",sub:"N'EX成田特快 · 约60分"},{line:"M",txt:"东京→酒店最近站",sub:"地铁转乘 · 约10分"}],time:"75-85分",cost:"¥3,070"}},
+  {day:0,time:"18:00",name:"入住 + 轻松晚餐",en:"CHECK-IN & DINNER",lat:35.6812,lng:139.7671,addr:"市区酒店一带",stn:"—",stnLine:"JR",desc:"放下行李,在酒店附近吃顿轻松的晚饭。落地当天不排重行程,倒时差、适应节奏。具体住宿见上方「住宿」标签的推荐。",price:"¥1500-4000",free:false,transit:null},
+
+  // DAY 1
+  {day:1,time:"09:00",name:"麻布台Hills 观景台",en:"AZABUDAI HILLS",lat:35.6615,lng:139.7408,addr:"港区麻布台1-3-1",stn:"神谷町駅",stnLine:"H",desc:"Heatherwick Studio设计的当代地标,34楼观景台俯瞰东京塔全景。整段建筑巡礼的开场。",ticket:"¥500",hours:[11,23],closedDays:[],transit:{to:"teamLab Borderless",legs:[{line:"M",txt:"神谷町→赤坂見附",sub:"丸ノ内線 · 2駅"},{line:"F",txt:"赤坂見附→豊洲",sub:"副都心線乗換 · 约10分"}],time:"18分",cost:"¥195"}},
+  {day:1,time:"11:00",name:"teamLab Borderless",en:"TEAMLAB BORDERLESS",lat:35.6491,lng:139.7898,addr:"江東区豊洲6-1-16",stn:"豊洲駅",stnLine:"F",desc:"沉浸式数字艺术馆,作品随观众移动而变化。务必提前官网预约,旺季常售罄。",ticket:"¥3800前后",hours:[8,22],closedDays:[2],warn:"⚠️ 每周二休馆 — 出发前确认那天不是周二,并提前官网购票",transit:{to:"筑地场外市場",legs:[{line:"H",txt:"豊洲→築地",sub:"日比谷線 OR 都营巴士"}],time:"15-20分",cost:"¥195"}},
+  {day:1,time:"13:30",name:"筑地场外市場",en:"TSUKIJI OUTER MARKET",lat:35.6648,lng:139.7703,addr:"中央区筑地4-16",stn:"築地駅",stnLine:"H",desc:"海鲜丼、和牛寿司、玉子烧——边走边吃。建议带现金,部分摊位不收卡。",price:"¥500–3000",free:false,hours:[5,14],closedDays:[0],warn:"提示:多数摊位下午2点后陆续收摊,尽量1点前到",transit:{to:"GINZA SIX",legs:[{line:"H",txt:"築地→東銀座→徒歩",sub:"或銀座線1駅"}],time:"4-8分",cost:"¥170"}},
+  {day:1,time:"15:30",name:"GINZA SIX",en:"GINZA SIX",lat:35.6698,lng:139.7642,addr:"中央区銀座6-10-1",stn:"銀座駅",stnLine:"G",desc:"银座最高端商业体。屋顶花园免费开放可俯瞰银座,6楼蔦屋书店是设计选品天堂。",free:true,hours:[10.5,20.5],closedDays:[],transit:null},
+
+  // DAY 2
+  {day:2,time:"08:00",name:"浅草寺",en:"SENSŌ-JI",lat:35.7148,lng:139.7967,addr:"台東区浅草2-3-1",stn:"浅草駅",stnLine:"G",desc:"东京最古老的寺庙。清早8点前到避开人潮,仲見世通买手作伴手礼,感受空灵氛围。",free:true,transit:{to:"根津神社",legs:[{line:"G",txt:"浅草→上野→根津",sub:"銀座線+千代田線 · 约3駅"}],time:"8-12分",cost:"¥170"}},
+  {day:2,time:"10:00",name:"根津神社",en:"NEZU SHRINE",lat:35.7201,lng:139.7608,addr:"文京区根津1-28-9",stn:"根津駅",stnLine:"C",desc:"朱红鸟居隧道层叠,比京都伏见稻荷安静十倍。绝佳摄影地,4-5月杜鹃花季尤美。",free:true,hours:[6,17],closedDays:[],transit:{to:"谷中银座",legs:[{line:"WALK",txt:"根津→谷中银座",sub:"穿过老街区 · 上坡路"}],time:"15分",cost:"¥0"}},
+  {day:2,time:"11:30",name:"谷中银座",en:"YANAKA GINZA",lat:35.7199,lng:139.7712,addr:"台東区谷中3-13",stn:"日暮里駅 / 根津駅",stnLine:"C",desc:"昭和年代风貌老街,以猫咪文化闻名。本地零食铺、煎饼、可乐饼与手工艺小店密集。",price:"¥500–2000",free:false,transit:{to:"下北泽",legs:[{line:"C",txt:"根津→明治神宮前",sub:"千代田線"},{line:"IN",txt:"→下北沢",sub:"渋谷経由井の頭線"}],time:"30-35分",cost:"¥260"}},
+  {day:2,time:"14:00",name:"下北泽复古街区",en:"SHIMOKITAZAWA",lat:35.6613,lng:139.6679,addr:"世田谷区北沢2-12",stn:"下北沢駅",stnLine:"IN",desc:"古着天堂+独立咖啡馆+小剧场,东京最有灵魂的街区。年轻文化与亚文化的中心。",price:"¥500–3000",free:false,transit:null},
+
+  // DAY 3 镰仓
+  {day:3,time:"08:30",name:"出发前往镰仓",en:"DEPART FOR KAMAKURA",lat:35.6812,lng:139.7671,addr:"东京站 横須賀線月台",stn:"东京站",stnLine:"JR",desc:"建议8:30前出发避开人潮。东京站乘JR横须贺线直达镰仓约1小时。可在镰仓站购买江之电1日券¥800无限次乘坐。",free:true,warn:"提示:JR横须贺线从东京站直达镰仓,无需换乘,单程约¥940。",transit:{to:"高德院大佛",legs:[{line:"JR",txt:"东京→镰仓",sub:"JR横須賀線 · 约60分"},{line:"EN",txt:"镰仓→长谷",sub:"江ノ電 · 5分"}],time:"70分",cost:"¥940+¥220"}},
+  {day:3,time:"10:00",name:"高德院大佛",en:"KOTOKU-IN BUDDHA",lat:35.3168,lng:139.5357,addr:"神奈川県鎌倉市長谷4-2-28",stn:"長谷駅",stnLine:"EN",desc:"13世纪铜铸阿弥陀佛,高13.4米。原本殿堂毁于海啸,自此露天而坐。可入佛像内部参观。",ticket:"¥300+¥50内部",hours:[8,16.75],closedDays:[],transit:{to:"长谷寺",legs:[{line:"WALK",txt:"大佛→长谷寺",sub:"同长谷地区步行"}],time:"8分",cost:"¥0"}},
+  {day:3,time:"11:30",name:"长谷寺",en:"HASE-DERA",lat:35.3125,lng:139.5331,addr:"神奈川県鎌倉市長谷3-11-2",stn:"長谷駅",stnLine:"EN",desc:"山腰寺院俯瞰相模湾,殿内9米高木雕十一面观音。四季花景各异,6月绣球花最著名。",ticket:"¥400",hours:[8,17],closedDays:[],transit:{to:"小町通",legs:[{line:"EN",txt:"長谷→鎌倉",sub:"江ノ電 · 约5分"}],time:"10分",cost:"¥220"}},
+  {day:3,time:"14:00",name:"小町通 & 若宫大路",en:"KOMACHI-DŌRI",lat:35.3190,lng:139.5520,addr:"神奈川県鎌倉市小町",stn:"鎌倉駅",stnLine:"EN",desc:"鸽子饼、镰仓啤酒、紫薯甜品、古着小店密集。鹤冈八幡宫就在若宫大路尽头,可顺道参拜。",price:"¥500–2000",free:false,transit:{to:"返回市区酒店",legs:[{line:"JR",txt:"镰仓→东京站",sub:"JR横須賀線 · 直通约60分"}],time:"60分",cost:"¥940"}},
+
+  // DAY 4 港区设计
+  {day:4,time:"10:00",name:"21_21 Design Sight",en:"21_21 DESIGN SIGHT",lat:35.6655,lng:139.7290,addr:"港区赤坂9-7-6 東京ミッドタウン",stn:"六本木駅 / 乃木坂駅",stnLine:"H",desc:"安藤忠雄×三宅一生共同创立。清水混凝土与折纸屋顶,建筑本身即是展品。",ticket:"¥1400前后",hours:[10,19],closedDays:[2],warn:"⚠️ 每周二休馆 — 与teamLab同休馆日,统一避开周二",transit:{to:"Tokyo Midtown",legs:[{line:"WALK",txt:"同区域内",sub:"21_21就在Midtown花园内"}],time:"3分",cost:"¥0"}},
+  {day:4,time:"11:30",name:"Tokyo Midtown",en:"TOKYO MIDTOWN",lat:35.6664,lng:139.7307,addr:"港区赤坂9-7-1",stn:"六本木駅",stnLine:"H",desc:"高端购物廊+户外草坪公园,常设公共艺术装置。可在此午餐休整。",free:true,hours:[11,21],closedDays:[],transit:{to:"表参道Hills",legs:[{line:"H",txt:"六本木→恵比寿",sub:"日比谷線"},{line:"WALK",txt:"或銀座線经赤坂見附",sub:"至表参道駅"}],time:"12-15分",cost:"¥180"}},
+  {day:4,time:"13:30",name:"表参道Hills",en:"OMOTESANDŌ HILLS",lat:35.6673,lng:139.7106,addr:"渋谷区神宮前4-12-10",stn:"表参道駅",stnLine:"G",desc:"安藤忠雄设计。内部螺旋坡道沿建筑高度盘旋而上,建筑结构比店铺本身更值得细看。",free:true,hours:[11,20],closedDays:[],transit:{to:"青山学院大学",legs:[{line:"WALK",txt:"表参道→青山学院",sub:"沿青山通步行"}],time:"5分",cost:"¥0"}},
+  {day:4,time:"14:45",name:"青山学院大学",en:"AOYAMA GAKUIN",lat:35.6628,lng:139.7128,addr:"港区南青山4-16-1",stn:"表参道駅",stnLine:"G",desc:"英式校园,绿树成荫的步道。短暂打卡感受东京名校氛围。",free:true,hours:[9,17],closedDays:[0],warn:"⚠️ 周日关闭 | 工作日9:00-17:00(午休12:00-13:30不便参观)",transit:{to:"南青山精品街",legs:[{line:"WALK",txt:"校园→南青山",sub:"穿过设计师店街区"}],time:"3分",cost:"¥0"}},
+  {day:4,time:"15:30",name:"南青山 SOU·SOU & 精品街",en:"MINAMI-AOYAMA",lat:35.6647,lng:139.7155,addr:"港区南青山5-1",stn:"表参道駅",stnLine:"G",desc:"SOU·SOU是京都和服现代化改良品牌。周边密集分布独立设计师店与画廊。",price:"¥1000–5000",free:false,transit:{to:"Adidas 涩谷",legs:[{line:"G",txt:"表参道→渋谷",sub:"銀座線 · 2駅"}],time:"6分",cost:"¥170"}},
+  {day:4,time:"16:30",name:"Adidas Brand Center 涩谷",en:"ADIDAS BRAND CENTER ★",lat:35.6598,lng:139.6993,addr:"渋谷区道玄坂23-5",stn:"渋谷駅",stnLine:"G",desc:"东京最大的阿迪达斯旗舰店(3层)。日本限定款+合作款,3楼有刺绣/热印定制服务,可做专属纪念T恤。靠近Scramble Square。",price:"¥3000–15000",free:false,hours:[11,21],closedDays:[],warn:"提示:此店不支持免税(tax-free),购物时纳入预算。3楼定制约需等待20-30分",transit:{to:"六本木Hills 森美術館",legs:[{line:"G",txt:"渋谷→表参道",sub:"銀座線"},{line:"H",txt:"→六本木",sub:"日比谷線 · 直結"}],time:"12分",cost:"¥210"}},
+  {day:4,time:"17:30",name:"六本木Hills 森美術館",en:"MORI ART MUSEUM",lat:35.6604,lng:139.7293,addr:"港区六本木6-10-1 森Tower 53F",stn:"六本木駅",stnLine:"H",desc:"52楼当代艺术展+东京城市夜景。傍晚到正好赶上暮色转灯,完美收尾建筑主线日。",ticket:"¥2000前后",hours:[10,22],closedDays:[],transit:null},
+
+  // DAY 5 代官山→成田
+  {day:5,time:"09:30",name:"代官山 T-Site 蔦屋书店",en:"DAIKANYAMA T-SITE",lat:35.6489,lng:139.6998,addr:"渋谷区代官山町17-5",stn:"代官山駅",stnLine:"TY",desc:"全球最美书店之一。最后一天的悠闲早晨:翻设计/摄影书,内设Starbucks可吃早午餐。槇文彦的Hillside Terrace就在隔壁,想看建筑可顺道走5分钟。",free:true,hours:[9,22],closedDays:[],transit:{to:"回酒店取行李",legs:[{line:"TY",txt:"代官山→市区酒店",sub:"东急东横线方向"}],time:"视酒店位置",cost:"—"}},
+  {day:5,time:"11:30",name:"回酒店取行李",en:"COLLECT LUGGAGE",lat:35.6812,lng:139.7671,addr:"返回市区酒店",stn:"酒店最近站",stnLine:"JR",desc:"⏰ 关键时间节点。11:30前回酒店取寄存行李。航班17:55,必须15:25前到成田值机,留足缓冲。务必13:30前出发前往机场。",free:true,warn:"⚠️ 13:30 是离开市区的最晚时限 — 晚于此点赶飞机会很紧张",transit:{to:"成田机场",legs:[{line:"M",txt:"酒店→东京站",sub:"地铁 · 约10分"},{line:"JR",txt:"东京→成田空港",sub:"N'EX成田特快 · 约60分"}],time:"75-85分",cost:"¥3,070"}},
+  {day:5,time:"15:00",name:"抵达成田 · 值机",en:"ARRIVE NARITA · CHECK-IN",lat:35.7720,lng:140.3929,addr:"成田国際空港",stn:"成田空港駅",stnLine:"JR",desc:"目标15:00-15:25抵达。办理值机、托运、过安检与出境。国际航班务必预留2-2.5小时。剩余时间可在免税区采购最后伴手礼。",free:true,warn:"✈️ 航班 17:55 起飞 — 此时间线已倒推预留充足缓冲",transit:null}
+];
+
+const DAYS=[
+  {id:0,jp:"抵达日",title:"成田落地 · 入住 · 倒时差",sub:"15:30落地成田,N'EX直达市区酒店。当天不安排重行程,轻松晚餐适应节奏。"},
+  {id:1,jp:"麻布台→银座",title:"现代地标 · 数字艺术 · 市场 · 商圈",sub:"以Heatherwick的当代塔楼开场,走过数字艺术与百年市场,落在银座屋顶花园。"},
+  {id:2,jp:"浅草→下北泽",title:"传统东京 · 老街 · 亚文化",sub:"上午走寺庙与鸟居的精神脉络,下午切入老街猫巷与古着青年文化。"},
+  {id:3,jp:"镰仓一日游",title:"大佛 · 长谷寺 · 小町通",sub:"居中安排,体力最好时去最远的地方。JR横须贺线从东京站直达,十三世纪铜铸大佛与木雕观音。"},
+  {id:4,jp:"港区设计巡礼",title:"安藤忠雄 · 设计 · Adidas · 夜景",sub:"建筑高潮日:安藤忠雄连出两件作品,中段穿插校园、南青山与涩谷Adidas,傍晚森美術馆收尾。"},
+  {id:5,jp:"代官山→成田",title:"悠闲上午 · 取行李 · 返程",sub:"最后一天轻量收尾:代官山书店早午餐,11:30取行李,13:30前出发,15:00抵达成田赶17:55航班。"}
+];
+
+const HOTELS=[
+  {name:"ONE@Tokyo",en:"ONE@Tokyo by insomnia",area:"押上 · 晴空塔旁",lat:35.7118,lng:139.8160,
+   price:"¥650–1,100",room:"双人房 · 设计客房",tier:"隈研吾设计 · 高性价比",
+   stn:"押上駅 步行3分(浅草线/半藏门线)",
+   near:"东京晴空塔(眼前)/ Solamachi商城 / 浅草直达",
+   note:"隈研吾设计的网红酒店,门口招牌木装饰是标志性大师风格,内部金属与木材交替。顶楼露台正对晴空塔。押上站浅草线可直达多处,价位在所有选项里最友好,且贴合你的建筑主题。",pick:true},
+  {name:"sequence 宫下公园",en:"sequence MIYASHITA PARK",area:"涩谷 · 神宫前",lat:35.6633,lng:139.7019,
+   price:"¥1,100–1,800",room:"双人房 · 设计感内饰",tier:"涩谷核心 · 潮流设计",
+   stn:"涩谷駅 步行5分 · 涩谷各线",
+   near:"宫下公园(楼内)/ 涩谷Scramble / Adidas旗舰店步行可达",
+   note:"位于话题商业体MIYASHITA PARK内,房间宽敞、设计出彩,可俯瞰涩谷。位置极佳——你Day4的涩谷Adidas、表参道都在步行/一两站内。注意紧邻铁道,浅眠者留意。"},
+  {name:"三井花园酒店 银座Premier",en:"Mitsui Garden Ginza Premier",area:"银座 · 新桥",lat:35.6671,lng:139.7632,
+   price:"¥1,200–2,000",room:"双人房 · 16楼起高层",tier:"银座地段 · 城市景观",
+   stn:"新橋駅 步行5分 · 银座步行圈",
+   near:"银座商圈 / GINZA SIX步行可达 / Don Quijote楼下",
+   note:"16楼空中大堂可俯瞰东京塔与城市夜景,房间现代精致(东京标准偏小但够用)。银座地段,你Day1的GINZA SIX、筑地都在步行或一两站内,购物动线极顺。"},
+  {name:"三井花园酒店 汐留意大利街",en:"Mitsui Garden Shiodome",area:"汐留 · 东新桥",lat:35.6603,lng:139.7570,
+   price:"¥1,000–1,700",room:"双人房 · 相对宽敞",tier:"安静街区 · 房间较大",
+   stn:"汐留駅/新橋駅 步行 · 多线交汇",
+   near:"意大利街 / 滨离宫庭园 / 银座一站",
+   note:"位于汐留意大利街,房间在东京算相对宽敞,氛围安静但紧邻多条铁路线。从羽田/成田动线都顺,银座一站可达。性价比与空间感平衡得好。"},
+  {name:"Mesm东京",en:"Mesm Tokyo, Autograph Collection",area:"竹芝 · 滨离宫旁",lat:35.6560,lng:139.7629,
+   price:"¥1,600–2,400",room:"双人房 · 艺术主题",tier:"艺术设计 · 河景房",
+   stn:"竹芝駅 直結 · 浜松町步行可达",
+   near:"滨离宫恩赐庭园(隔壁)/ teamLab步行圈 / 旧筑地",
+   note:"万豪Autograph系列,艺术细节满满(备品做成画册、毛巾叠花)。部分房间俯瞰隅田川与庭园。紧邻你Day1的teamLab一带。价位略高于区间上沿,但设计与景观出众。"},
+  {name:"hotel hisoca 池袋",en:"hotel hisoca ikebukuro",area:"池袋 · 西池袋",lat:35.7293,lng:139.7085,
+   price:"¥900–1,500",room:"公寓式房 · 带桑拿浴缸",tier:"高分新秀 · 空间大",
+   stn:"池袋駅 步行2分 · 机场巴士直达",
+   near:"池袋商圈 / 西武/东武百货 / 早稻田可达",
+   note:"评分高达4.7的设计新秀。公寓式房型带浴缸+雾化桑拿,空间在东京算宽敞,池袋站步行2分、机场利木津巴士直达。靠近你Day4早稻田,性价比突出。"}
+];
+
+let map, currentView=0, layerGroup, activeIdx=null;
+
+function initMap(){
+  map=L.map('map',{center:[35.668,139.74],zoom:11,zoomControl:true});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',maxZoom:19,subdomains:'abcd'
+  }).addTo(map);
+  layerGroup=L.layerGroup().addTo(map);
+  renderDaybar();
+  selectView(0);
+}
+
+function renderDaybar(){
+  const bar=document.getElementById('daybar');
+  let html=DAYS.map(d=>`
+    <button class="daybar-btn ${d.id===currentView?'active':''}" data-d="${d.id}" onclick="selectView(${d.id})">
+      <span class="dn">${d.id}</span><span class="dl">${d.jp}</span>
+    </button>`).join('');
+  // 住宿 tab
+  html+=`<button class="daybar-btn ${currentView==='H'?'active':''}" data-d="H" onclick="selectView('H')">
+      <span class="dn">🛏</span><span class="dl">住宿</span></button>`;
+  bar.innerHTML=html;
+}
+
+function selectView(v){
+  currentView=v; activeIdx=null;
+  document.querySelectorAll('.daybar-btn').forEach(b=>b.classList.toggle('active', b.dataset.d==String(v)));
+  if(v==='H'){ renderHotels(); renderHotelMap(); }
+  else { renderDay(v); renderMap(v); }
+  // 切换时面板回到顶部
+  const sc=document.querySelector('.scroller'); if(sc) sc.scrollTop=0;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function parseCost(c){return (c||'').split('+').reduce((s,p)=>{const d=p.replace(/[^\d]/g,'');return s+(d?parseInt(d):0);},0);}
+
+function renderDay(day){
+  const d=DAYS.find(x=>x.id===day);
+  const stops=STOPS.filter(s=>s.day===day);
+  const dc=DC[day];
+  const total=stops.reduce((a,s)=>a+(s.transit?parseCost(s.transit.cost):0),0);
+  let html=`
+    <div class="phead" style="--dc-head:${dc}">
+      <div class="eyebrow">DAY ${d.id} · ${d.jp}</div>
+      <h1>${d.title}</h1>
+      <div class="sub">${d.sub}</div>
+      <div class="daystat">
+        <div class="si"><div class="sv">${stops.length}</div><div class="sl">STOPS 站点</div></div>
+        <div class="si"><div class="sv">${stops[0].time}</div><div class="sl">START 起点</div></div>
+        <div class="si"><div class="sv">¥${total}</div><div class="sl">TRANSIT 当日交通</div></div>
+      </div>
+    </div>
+    <div class="scroller"><div class="timeline" style="--dc-head:${dc}">`;
+  stops.forEach((s,i)=>{
+    const st=openStatus(s), stnC=LINES[s.stnLine]?LINES[s.stnLine].c:'#666';
+    html+=`
+      <div class="tstop ${i===activeIdx?'active':''}" id="stop-${i}">
+        <div class="tdot"></div>
+        <div class="tcard" tabindex="0" onclick="focusStop(${i})">
+          <div class="row1"><span class="time">${s.time}</span>${st?`<span class="openchip ${st.cls}">${st.txt}</span>`:''}</div>
+          <h3>${s.name}</h3><div class="en">${s.en}</div>
+          <div class="desc">${s.desc}</div>
+          <div class="meta">
+            <span class="chip addr">📍 ${s.addr}</span>
+            ${s.stn!=='—'?`<span class="chip stn" style="background:${stnC}">🚇 ${s.stn}</span>`:''}
+            ${s.ticket?`<span class="chip ticket">🎫 ${s.ticket}</span>`:''}
+            ${s.price?`<span class="chip price">💰 ${s.price}</span>`:''}
+          </div>
+          ${s.warn?`<div class="warn">${s.warn}</div>`:''}
+          ${s.transit?renderTransit(s.transit):''}
+        </div>
+      </div>`;
+  });
+  html+=`</div></div>`;
+  document.getElementById('panel').innerHTML=html;
+}
+
+function renderTransit(t){
+  const legs=t.legs.map(leg=>{
+    const L_=LINES[leg.line]||LINES.WALK;
+    return `<div class="leg"><div class="lineicon" style="background:${L_.c}">${leg.line==='WALK'?'🚶':leg.line}</div>
+      <div class="linetext"><b>${L_.name}</b> · ${leg.txt}<br><span class="sub">${leg.sub}</span></div></div>`;
+  }).join('');
+  return `<div class="transit"><div class="th"><span>↓ 前往下一站</span><span class="next">${t.to}</span></div>
+    <div class="legs">${legs}</div>
+    <div class="summ"><span>⏱ <b>${t.time}</b></span><span>💳 <b>${t.cost}</b></span></div></div>`;
+}
+
+function renderHotels(){
+  const dc=DC.H;
+  let html=`
+    <div class="phead" style="--dc-head:${dc}">
+      <div class="eyebrow">WHERE TO STAY · 精选住宿</div>
+      <h1>六处设计住宿</h1>
+      <div class="sub">建议全程住同一家市区酒店,免去换酒店搬行李。价位约¥1,000-2,000/晚(人民币),均为有设计感的中高端之选,各有不同区域与动线。点卡片可在地图定位,★为综合推荐。</div>
+    </div>
+    <div class="scroller"><div class="hotelview" style="--dc-head:${dc}">`;
+  HOTELS.forEach((h,i)=>{
+    const stnC=DC.H;
+    html+=`
+      <div class="hcard ${h.pick?'pick':''}" tabindex="0" onclick="focusHotel(${i})">
+        ${h.pick?`<div class="picktag">★ 综合推荐</div>`:''}
+        <div class="hrow"><h3>${h.name}</h3><span class="harea">${h.area}</span></div>
+        <div class="hen">${h.en}</div>
+        <div class="hmeta">
+          <span class="chip price">💰 ${h.price}/晚</span>
+          <span class="chip addr">🛏 ${h.room}</span>
+          <span class="chip addr">✦ ${h.tier}</span>
+        </div>
+        <div class="hsub"><span class="hicon">🚇</span><div><b>最近车站</b>${h.stn}</div></div>
+        <div class="hsub"><span class="hicon">🏬</span><div><b>周边</b>${h.near}</div></div>
+        <div class="hnote">${h.note}</div>
+      </div>`;
+  });
+  html+=`</div></div>`;
+  document.getElementById('panel').innerHTML=html;
+}
+
+function renderHotelMap(){
+  layerGroup.clearLayers();
+  const dc=DC.H, coords=[];
+  HOTELS.forEach((h,i)=>{
+    coords.push([h.lat,h.lng]);
+    const icon=L.divIcon({html:`<div class="hotelpin" style="background:${dc}">🛏</div>`,iconSize:[30,30],iconAnchor:[15,30],className:''});
+    L.marker([h.lat,h.lng],{icon}).bindPopup(`<b>${h.name}</b><br>🚇 ${h.stn}<br>🏬 ${h.near}<br>💰 ${h.price}/晚`).on('click',()=>focusHotel(i)).addTo(layerGroup);
+  });
+  const grp=L.featureGroup(layerGroup.getLayers());
+  if(grp.getLayers().length) map.fitBounds(grp.getBounds().pad(.25),{maxZoom:13});
+}
+
+function focusHotel(i){
+  const h=HOTELS[i];
+  document.querySelectorAll('.hcard').forEach((c,idx)=>c.classList.toggle('hactive',idx===i));
+  map.setView([h.lat,h.lng],15,{animate:true});
+  const el=document.querySelectorAll('.hcard')[i];
+  if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function clearMap(){ layerGroup.clearLayers(); }
+
+function renderMap(day){
+  layerGroup.clearLayers();
+  const stops=STOPS.filter(s=>s.day===day), dc=DC[day], coords=[];
+  stops.forEach((s,i)=>{
+    coords.push([s.lat,s.lng]);
+    const icon=L.divIcon({html:`<div class="pin ${activeIdx!==null&&activeIdx!==i?'dim':''}" style="background:${dc}"><span>${i+1}</span></div>`,iconSize:[34,34],iconAnchor:[17,34],className:''});
+    L.marker([s.lat,s.lng],{icon}).bindPopup(`<b>${s.time} · ${s.name}</b><br>📍 ${s.addr}${s.stn!=='—'?'<br>🚇 '+s.stn:''}`).on('click',()=>focusStop(i)).addTo(layerGroup);
+  });
+  if(coords.length>1) L.polyline(coords,{color:dc,weight:3,opacity:.65,dashArray:'2,8',lineCap:'round'}).addTo(layerGroup);
+  const grp=L.featureGroup(layerGroup.getLayers());
+  if(grp.getLayers().length) map.fitBounds(grp.getBounds().pad(.2),{maxZoom:14});
+}
+
+function focusStop(i){
+  if(currentView==='H') return;
+  activeIdx=i;
+  const s=STOPS.filter(x=>x.day===currentView)[i];
+  renderDay(currentView); renderMap(currentView);
+  map.setView([s.lat,s.lng],15,{animate:true});
+  setTimeout(()=>{const el=document.getElementById('stop-'+i); if(el) el.scrollIntoView({behavior:'smooth',block:'center'});},120);
+}
+
+window.addEventListener('DOMContentLoaded',initMap);
+</script>
+</body>
+</html>
